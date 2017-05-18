@@ -17,11 +17,16 @@
 #include <semaphore.h>
 #include <pthread.h>
 
+#define THREADS_NUMBER 4
+
 typedef unsigned char cell_t;
 
-sem_t semfor, semswap;
-int size, steps, num_threads, n;
+int size;
+int steps, k;
+int num_threads, lines, reminder;
+
 cell_t ** prev, ** next, ** tmp;
+pthread_barrier_t barrier;
 
 cell_t ** allocate_board (int size) {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
@@ -68,59 +73,6 @@ int adjacent_to (cell_t ** board, int size, int i, int j) {
   return count;
 }
 
-int a, k;
-int sum = 0;
-
-void *play () {
-  /* for each cell, apply the rules of Life */
-
-  while (k < steps) {
-    int id_sem = 0;
-
-    sem_wait(&semfor);
-    sem_getvalue(&semfor, &id_sem);
-    printf("id semaforo after wait: %d\n", id_sem);
-      for (int i=0; i<n; i++)
-        for (int j=0; j<n; j++) {
-        a = adjacent_to (prev, size, i+(id_sem*n), j+(id_sem*n));
-        if (a == 2) next[i+(id_sem*n)][j+(id_sem*n)] = prev[i+(id_sem*n)][j+(id_sem*n)];
-        if (a == 3) next[i+(id_sem*n)][j+(id_sem*n)] = 1;
-        if (a < 2) next[i+(id_sem*n)][j+(id_sem*n)] = 0;
-        if (a > 3) next[i+(id_sem*n)][j+(id_sem*n)] = 0;
-      }
-
-    sum++;
-    printf("valor soma ate agora: %d\n",sum );
-    if(sum == num_threads) {
-      printf("dentro do if sum\n");
-      for (int t = 0; t < num_threads; t++) 
-        sem_post(&semfor);
-    } else {
-        sem_wait(&semfor);
-    }
-    // barreira
-    // aqui so uma thread
-    sem_wait(&semswap);
-    if(id_sem == 0) {
-      tmp = next;
-      next = prev;
-      prev = tmp;
-      k++;
-
-    #ifdef DEBUG
-    printf("%d ----------\n", k + 1);
-    print (next,size);
-    #endif
-
-    }
-    sem_post(&semswap);
-    
-  }
-
-  pthread_exit(NULL);
-}
-
-
 /* read a file into the life board */
 void read_file (FILE * f, cell_t ** board, int size) {
   int i, j;
@@ -139,8 +91,64 @@ void read_file (FILE * f, cell_t ** board, int size) {
   }
 }
 
-int main () {
-  printf("oi\n");
+void play (int this_start, int this_end, int thread_id) {
+  /* for each cell, apply the rules of Life */
+  int a;
+
+  while (k < steps) {
+
+    for (int i=this_start; i<this_end; i++) {
+        for (int j=0; j<size; j++) {
+          a = adjacent_to (prev, size, i, j);
+          if (a == 2) next[i][j] = prev[i][j];
+          if (a == 3) next[i][j] = 1;
+          if (a < 2) next[i][j] = 0;
+          if (a > 3) next[i][j] = 0;
+      }
+    }
+
+    // Barreira pra todas as threads terminarem de processar
+    pthread_barrier_wait(&barrier);
+
+    // Uma única thread executa o final do step
+    // Poderia usar PTHREAD_BARRIER_SERIAL_THREAD?
+    if(thread_id == 0) {
+      tmp = next;
+      next = prev;
+      prev = tmp;
+      k++;
+      //printf("I'm doing stuff! Step = %d\n", k);
+      #ifdef DEBUG
+      printf("%d ----------\n", k);
+      print (next,size);
+      #endif
+    }
+
+    // Barreira para esperarem o final do step
+    pthread_barrier_wait(&barrier);
+    
+  }
+
+  pthread_exit(NULL);
+}
+
+void* defineWork(void* arg) {
+  int thread_id = *((int *) arg);
+  int this_start = thread_id * lines;
+  int this_end = this_start + lines;
+
+  // A última thread pega o resto
+  if (thread_id == num_threads - 1) {
+    this_end+= reminder;
+  }
+
+  play(this_start, this_end, thread_id);
+
+}
+
+int main (int argc, char ** argv) {
+
+  // Ler informações do arquivo input
   FILE    *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
@@ -148,33 +156,41 @@ int main () {
   read_file (f, prev,size);
   fclose(f);
   next = allocate_board (size);
+
+  // Debug print
   #ifdef DEBUG
   printf("Initial:\n");
   print(prev,size);
   #endif  
 
-  num_threads = 4;
+  // Número de threads pelo argumento
+  if (argc!=2) {
+    num_threads = THREADS_NUMBER;
+  } else {
+    num_threads = atoi(argv[1]);
+  }
+
+  // Dividindo trabalho
+  lines = size/num_threads; 
+  reminder = size%num_threads;
+
+  // Inicializar threads
+  pthread_barrier_init(&barrier, NULL, num_threads);
   pthread_t threads[num_threads];
-  n = size/num_threads;
-  sem_init(&semfor, 0, num_threads);
-  sem_init(&semswap, 0, num_threads);
-  printf("top denovo\n");
-  //play ();
+
   for (int i = 0; i < num_threads; ++i)
-  {
-    pthread_create(&threads[i], NULL, play, NULL);
+  { 
+    int *arg = malloc(sizeof(int));
+    *arg = i;
+    pthread_create(&threads[i], NULL, defineWork, arg);
   }
 
   for (int i = 0; i < num_threads; ++i)
   {
     pthread_join(threads[i], NULL);
   }
-  sem_destroy(&semfor);
-  sem_destroy(&semswap);
 
-
-  
-
+  // Result print
   #ifdef RESULT
   printf("Final:\n");
   print (prev,size);
