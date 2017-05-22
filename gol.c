@@ -111,17 +111,15 @@ void play (int this_start, int this_end, int thread_id) {
     pthread_barrier_wait(&barrier);
 
     // Uma única thread executa o final do step
-    // Poderia usar PTHREAD_BARRIER_SERIAL_THREAD?
     if(thread_id == 0) {
+      #ifdef DEBUG
+      printf("%d ----------\n", k + 1);
+      print (next,size);
+      #endif
       tmp = next;
       next = prev;
       prev = tmp;
       k++;
-      //printf("I'm doing stuff! Step = %d\n", k);
-      #ifdef DEBUG
-      printf("%d ----------\n", k);
-      print (next,size);
-      #endif
     }
 
     // Barreira para esperarem o final do step
@@ -165,7 +163,11 @@ int main (int argc, char ** argv) {
 
   // Número de threads pelo argumento
   if (argc!=2) {
+    printf("Não foi definido um valor único de threads, utilizando o padrão: %d.\n", THREADS_NUMBER);
     num_threads = THREADS_NUMBER;
+  } else if (atoi(argv[1]) > size){
+    printf("Número de threads maior que número de linhas da matriz; criando apenas %d threads.\n", size);
+    num_threads = size;
   } else {
     num_threads = atoi(argv[1]);
   }
@@ -177,6 +179,8 @@ int main (int argc, char ** argv) {
   // Inicializar threads
   pthread_barrier_init(&barrier, NULL, num_threads);
   pthread_t threads[num_threads];
+
+  int k = 0;
 
   for (int i = 0; i < num_threads; ++i)
   { 
@@ -196,6 +200,7 @@ int main (int argc, char ** argv) {
   print (prev,size);
   #endif
 
+  pthread_barrier_destroy(&barrier);
   free_board(prev,size);
   free_board(next,size);
 }
