@@ -58,19 +58,29 @@ void print (cell_t ** board, int size) {
 
 /* return the number of on cells adjacent to the i,j cell */
 int adjacent_to (cell_t ** board, int size, int i, int j) {
-  int k, l, count=0;
+  int k, l, c1, c2, c3, c4, r1, r2, count=0;
 
   int sk = (i>0) ? i-1 : i;
   int ek = (i+1 < size) ? i+1 : i;
   int sl = (j>0) ? j-1 : j;
   int el = (j+1 < size) ? j+1 : j;
 
+  if ((i>0)&&(i+1 < size)&&(j>0)&&(j+1 < size)) {
+    c1 = board[sk-1][sl-1] + board[sk][el];
+    c2 = board[sk-1][sl] + board[ek][sl];
+    c3 = board[sk-1][el] + board[ek][sl+1];
+    c4 = board[sk][sl-1] + board[ek][el];
+    r1 = c1 + c2;
+    r2 = c3 + c4;
+    count = r1 + r2;
+  }else {
   for (k=sk; k<=ek; k++)
     for (l=sl; l<=el; l++)
       count+=board[k][l];
   count-=board[i][j];
 
   return count;
+}
 }
 
 /* read a file into the life board */
@@ -111,15 +121,17 @@ void play (int this_start, int this_end, int thread_id) {
     pthread_barrier_wait(&barrier);
 
     // Uma única thread executa o final do step
+    // Poderia usar PTHREAD_BARRIER_SERIAL_THREAD?
     if(thread_id == 0) {
-      #ifdef DEBUG
-      printf("%d ----------\n", k + 1);
-      print (next,size);
-      #endif
       tmp = next;
       next = prev;
       prev = tmp;
       k++;
+      //printf("I'm doing stuff! Step = %d\n", k);
+      #ifdef DEBUG
+      printf("%d ----------\n", k);
+      print (next,size);
+      #endif
     }
 
     // Barreira para esperarem o final do step
@@ -163,11 +175,7 @@ int main (int argc, char ** argv) {
 
   // Número de threads pelo argumento
   if (argc!=2) {
-    printf("Não foi definido um valor único de threads, utilizando o padrão: %d.\n", THREADS_NUMBER);
     num_threads = THREADS_NUMBER;
-  } else if (atoi(argv[1]) > size){
-    printf("Número de threads maior que número de linhas da matriz; criando apenas %d threads.\n", size);
-    num_threads = size;
   } else {
     num_threads = atoi(argv[1]);
   }
@@ -179,8 +187,6 @@ int main (int argc, char ** argv) {
   // Inicializar threads
   pthread_barrier_init(&barrier, NULL, num_threads);
   pthread_t threads[num_threads];
-
-  int k = 0;
 
   for (int i = 0; i < num_threads; ++i)
   { 
@@ -200,7 +206,6 @@ int main (int argc, char ** argv) {
   print (prev,size);
   #endif
 
-  pthread_barrier_destroy(&barrier);
   free_board(prev,size);
   free_board(next,size);
 }
