@@ -56,30 +56,21 @@ void print (cell_t ** board) {
   }
 }
 
-int adjacent_to (cell_t ** board, int size, int i, int j) {
-  int k, l, c1, c2, c3, c4, r1, r2, count=0;
+/* return the number of on cells adjacent to the i,j cell */
+int adjacent_to (cell_t ** board, int i, int j) {
+  int k, l, count=0;
 
   int sk = (i>0) ? i-1 : i;
   int ek = (i+1 < size) ? i+1 : i;
   int sl = (j>0) ? j-1 : j;
   int el = (j+1 < size) ? j+1 : j;
 
-  if ((i>0)&&(i+1 < size)&&(j>0)&&(j+1 < size)) {
-    c1 = board[sk-1][sl-1] + board[sk][el];
-    c2 = board[sk-1][sl] + board[ek][sl];
-    c3 = board[sk-1][el] + board[ek][sl+1];
-    c4 = board[sk][sl-1] + board[ek][el];
-    r1 = c1 + c2;
-    r2 = c3 + c4;
-    count = r1 + r2;
-  } else {
   for (k=sk; k<=ek; k++)
     for (l=sl; l<=el; l++)
       count+=board[k][l];
   count-=board[i][j];
 
   return count;
-  }
 }
 
 /* read a file into the life board */
@@ -108,7 +99,7 @@ void play (int this_start, int this_end, int thread_id) {
 
     for (int i=this_start; i<this_end; i++) {
         for (int j=0; j<size; j++) {
-          a = adjacent_to (prev,size, i, j);
+          a = adjacent_to (prev, i, j);
           if (a == 2) next[i][j] = prev[i][j];
           if (a == 3) next[i][j] = 1;
           if (a < 2) next[i][j] = 0;
