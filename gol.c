@@ -28,7 +28,7 @@ int num_threads, lines, reminder;
 cell_t ** prev, ** next, ** tmp;
 pthread_barrier_t barrier;
 
-cell_t ** allocate_board (int size) {
+cell_t ** allocate_board () {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
   int i;
   for (i=0; i<size; i++)
@@ -36,7 +36,7 @@ cell_t ** allocate_board (int size) {
   return board;
 }
 
-void free_board (cell_t ** board, int size) {
+void free_board (cell_t ** board) {
   int     i;
   for (i=0; i<size; i++)
   free(board[i]);
@@ -44,7 +44,7 @@ void free_board (cell_t ** board, int size) {
 }
 
 /* print the life board */
-void print (cell_t ** board, int size) {
+void print (cell_t ** board) {
   int i, j;
   /* for each row */
   for (j=0; j<size; j++) {
@@ -56,7 +56,6 @@ void print (cell_t ** board, int size) {
   }
 }
 
-/* return the number of on cells adjacent to the i,j cell */
 int adjacent_to (cell_t ** board, int size, int i, int j) {
   int k, l, c1, c2, c3, c4, r1, r2, count=0;
 
@@ -73,18 +72,18 @@ int adjacent_to (cell_t ** board, int size, int i, int j) {
     r1 = c1 + c2;
     r2 = c3 + c4;
     count = r1 + r2;
-  }else {
+  } else {
   for (k=sk; k<=ek; k++)
     for (l=sl; l<=el; l++)
       count+=board[k][l];
   count-=board[i][j];
 
   return count;
-}
+  }
 }
 
 /* read a file into the life board */
-void read_file (FILE * f, cell_t ** board, int size) {
+void read_file (FILE * f, cell_t ** board) {
   int i, j;
   char  *s = (char *) malloc(size+10);
 
@@ -109,7 +108,7 @@ void play (int this_start, int this_end, int thread_id) {
 
     for (int i=this_start; i<this_end; i++) {
         for (int j=0; j<size; j++) {
-          a = adjacent_to (prev, size, i, j);
+          a = adjacent_to (prev,size, i, j);
           if (a == 2) next[i][j] = prev[i][j];
           if (a == 3) next[i][j] = 1;
           if (a < 2) next[i][j] = 0;
@@ -121,17 +120,15 @@ void play (int this_start, int this_end, int thread_id) {
     pthread_barrier_wait(&barrier);
 
     // Uma única thread executa o final do step
-    // Poderia usar PTHREAD_BARRIER_SERIAL_THREAD?
     if(thread_id == 0) {
+      #ifdef DEBUG
+      printf("%d ----------\n", k + 1);
+      print (next,size);
+      #endif
       tmp = next;
       next = prev;
       prev = tmp;
       k++;
-      //printf("I'm doing stuff! Step = %d\n", k);
-      #ifdef DEBUG
-      printf("%d ----------\n", k);
-      print (next,size);
-      #endif
     }
 
     // Barreira para esperarem o final do step
@@ -162,20 +159,24 @@ int main (int argc, char ** argv) {
   FILE    *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
-  prev = allocate_board (size);
-  read_file (f, prev,size);
+  prev = allocate_board ();
+  read_file (f, prev);
   fclose(f);
-  next = allocate_board (size);
+  next = allocate_board ();
 
   // Debug print
   #ifdef DEBUG
   printf("Initial:\n");
-  print(prev,size);
+  print(prev);
   #endif  
 
   // Número de threads pelo argumento
   if (argc!=2) {
+    printf("Não foi definido um valor único de threads, utilizando o padrão: %d.\n", THREADS_NUMBER);
     num_threads = THREADS_NUMBER;
+  } else if (atoi(argv[1]) > size){
+    printf("Número de threads maior que número de linhas da matriz; criando apenas %d threads.\n", size);
+    num_threads = size;
   } else {
     num_threads = atoi(argv[1]);
   }
@@ -187,6 +188,8 @@ int main (int argc, char ** argv) {
   // Inicializar threads
   pthread_barrier_init(&barrier, NULL, num_threads);
   pthread_t threads[num_threads];
+
+  int k = 0;
 
   for (int i = 0; i < num_threads; ++i)
   { 
@@ -203,9 +206,10 @@ int main (int argc, char ** argv) {
   // Result print
   #ifdef RESULT
   printf("Final:\n");
-  print (prev,size);
+  print (prev);
   #endif
 
-  free_board(prev,size);
-  free_board(next,size);
+  pthread_barrier_destroy(&barrier);
+  free_board(prev);
+  free_board(next);
 }
